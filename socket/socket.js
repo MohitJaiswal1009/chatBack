@@ -1,38 +1,47 @@
-import {Server} from "socket.io";
+import { Server } from "socket.io";
 import http from "http";
 import express from "express";
 
 const app = express();
-
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors:{
-        origin:['http://localhost:3000'],
-        methods:['GET', 'POST'],
-    },
+  cors: {
+    origin: ["https://chat-wavefrontend.vercel.app"],
+    methods: ["GET", "POST"],
+    credentials: true
+  }
 });
 
-export const getReceiverSocketId = (receiverId) => {
-    return userSocketMap[receiverId];
-}
+// Mapping to keep track of user connections
+const userSocketMap = {};
 
-const userSocketMap = {}; // {userId->socketId}
+// Utility function to get a user's socket ID
+export const getReceiverSocketId = (receiverId) => userSocketMap[receiverId];
 
+// Socket.IO connection event
+io.on("connection", (socket) => {
+  const userId = socket.handshake.query.userId;
 
-io.on('connection', (socket)=>{
-    const userId = socket.handshake.query.userId
-    if(userId !== undefined){
-        userSocketMap[userId] = socket.id;
-    } 
+  if (userId) {
+    // Store user's socket ID
+    userSocketMap[userId] = socket.id;
+    console.log(`User ${userId} connected with socket ID ${socket.id}`);
+    
+    // Emit the updated list of online users to all clients
+    io.emit("getOnlineUsers", Object.keys(userSocketMap));
+  }
 
-    io.emit('getOnlineUsers',Object.keys(userSocketMap));
+  // Listen for disconnect event
+  socket.on("disconnect", () => {
+    if (userId) {
+      delete userSocketMap[userId];
+      console.log(`User ${userId} disconnected`);
+      
+      // Emit the updated list of online users to all clients
+      io.emit("getOnlineUsers", Object.keys(userSocketMap));
+    }
+  });
+});
 
-    socket.on('disconnect', ()=>{
-        delete userSocketMap[userId];
-        io.emit('getOnlineUsers',Object.keys(userSocketMap));
-    })
-
-})
-
-export {app, io, server};
-
+// Exports
+export { app, io, server };
